@@ -68,3 +68,18 @@
 - [x] Fix home button display and functionality in tab bar
 - [x] Ensure tab bar icons render properly
 - [x] Fix tab bar styling and visibility
+
+
+## Action Button Fixes
+
+- [x] Fix share button functionality
+- [x] Fix download button functionality
+- [x] Fix save to gallery button functionality
+- [x] Add error handling for all action buttons
+
+## Theme Implementation
+
+- [x] Create theme toggle component
+- [x] Implement light/dark mode switching
+- [x] Persist theme preference
+- [x] Update UI colors for both themes

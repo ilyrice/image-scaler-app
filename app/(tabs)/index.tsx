@@ -3,13 +3,13 @@ import {
   ScrollView,
   Text,
   View,
-  TouchableOpacity,
   TextInput,
   Image,
   ActivityIndicator,
   Alert,
   Platform,
   Pressable,
+  useColorScheme,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -18,6 +18,7 @@ import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
 import { ScreenContainer } from '@/components/screen-container';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface PickedImage {
   uri: string;
@@ -35,6 +36,7 @@ interface ScaledImage {
 }
 
 export default function HomeScreen() {
+  const systemColorScheme = useColorScheme();
   const [selectedImage, setSelectedImage] = useState<PickedImage | null>(null);
   const [scaledImage, setScaledImage] = useState<ScaledImage | null>(null);
   const [targetWidth, setTargetWidth] = useState('800');
@@ -42,6 +44,8 @@ export default function HomeScreen() {
   const [maintainAspectRatio, setMaintainAspectRatio] = useState(true);
   const [isScaling, setIsScaling] = useState(false);
   const [showResults, setShowResults] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(systemColorScheme === 'dark');
+  const [actionInProgress, setActionInProgress] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -52,8 +56,27 @@ export default function HomeScreen() {
           Alert.alert('Permission Required', 'Please allow access to your photo library');
         }
       }
+      // Load saved theme preference
+      try {
+        const savedTheme = await AsyncStorage.getItem('app-theme');
+        if (savedTheme) {
+          setIsDarkMode(savedTheme === 'dark');
+        }
+      } catch (e) {
+        console.error('Failed to load theme:', e);
+      }
     })();
   }, []);
+
+  const toggleTheme = async () => {
+    const newTheme = !isDarkMode;
+    setIsDarkMode(newTheme);
+    try {
+      await AsyncStorage.setItem('app-theme', newTheme ? 'dark' : 'light');
+    } catch (e) {
+      console.error('Failed to save theme:', e);
+    }
+  };
 
   const triggerHaptic = async () => {
     if (Platform.OS !== 'web') {
@@ -148,6 +171,7 @@ export default function HomeScreen() {
         },
         (error) => {
           console.error('Error getting image size:', error);
+          Alert.alert('Error', 'Failed to get scaled image dimensions');
           setIsScaling(false);
         }
       );
@@ -161,56 +185,75 @@ export default function HomeScreen() {
   const saveToGallery = async () => {
     if (!scaledImage) return;
 
+    setActionInProgress('save');
     try {
       await triggerHaptic();
       if (Platform.OS !== 'web') {
         const asset = await MediaLibrary.createAssetAsync(scaledImage.uri);
-        await MediaLibrary.createAlbumAsync('Scaled Images', asset, false);
+        try {
+          await MediaLibrary.createAlbumAsync('Scaled Images', asset, false);
+        } catch (e) {
+          // Album might already exist
+        }
         Alert.alert('Success', 'Image saved to gallery!');
+      } else {
+        Alert.alert('Info', 'Save to gallery is not available on web');
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to save image');
-      console.error(error);
+      Alert.alert('Error', 'Failed to save image to gallery');
+      console.error('Save to gallery error:', error);
+    } finally {
+      setActionInProgress(null);
     }
   };
 
   const shareImage = async () => {
     if (!scaledImage) return;
 
+    setActionInProgress('share');
     try {
       await triggerHaptic();
-      if (Platform.OS === 'web') {
-        if (!(await Sharing.isAvailableAsync())) {
-          Alert.alert('Error', 'Sharing is not available on this platform');
-          return;
-        }
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (!isAvailable) {
+        Alert.alert('Error', 'Sharing is not available on this platform');
+        return;
       }
-      await Sharing.shareAsync(scaledImage.uri);
+      await Sharing.shareAsync(scaledImage.uri, {
+        mimeType: 'image/jpeg',
+        dialogTitle: 'Share Scaled Image',
+      });
     } catch (error) {
-      Alert.alert('Error', 'Failed to share image');
-      console.error(error);
+      if ((error as any).message !== 'User did not share') {
+        Alert.alert('Error', 'Failed to share image');
+        console.error('Share error:', error);
+      }
+    } finally {
+      setActionInProgress(null);
     }
   };
 
   const downloadImage = async () => {
     if (!scaledImage) return;
 
+    setActionInProgress('download');
     try {
       await triggerHaptic();
       const timestamp = Date.now();
       const filename = `scaled-image-${timestamp}.jpg`;
       const docDir = (FileSystem as any).documentDirectory || (FileSystem as any).cacheDirectory;
-      const downloadPath = docDir + filename;
+      const downloadPath = `${docDir}${filename}`;
 
       await FileSystem.copyAsync({
         from: scaledImage.uri,
         to: downloadPath,
       });
 
-      Alert.alert('Success', `Image downloaded as ${filename}`);
+      Alert.alert('Success', `Image saved to: ${filename}`);
     } catch (error) {
       Alert.alert('Error', 'Failed to download image');
-      console.error(error);
+      console.error('Download error:', error);
+    } finally {
+      setActionInProgress(null);
     }
   };
 
@@ -222,17 +265,36 @@ export default function HomeScreen() {
     return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
   };
 
+  const bgColor = isDarkMode ? '#0A0E27' : '#F8FAFC';
+  const cardBg = isDarkMode ? 'bg-slate-900/30' : 'bg-white/40';
+  const textColor = isDarkMode ? 'text-slate-100' : 'text-slate-900';
+
   if (showResults && scaledImage) {
     return (
-      <ScreenContainer className="p-4 bg-gradient-to-br from-background via-background to-primary/5">
+      <ScreenContainer
+        className="p-4"
+        containerClassName={isDarkMode ? 'bg-slate-950' : 'bg-slate-50'}
+      >
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false}>
           <View className="flex-1 gap-5">
-            <View className="items-center gap-2 mb-2">
-              <Text className="text-4xl font-bold text-foreground">Complete</Text>
-              <Text className="text-sm text-muted">Your image is ready</Text>
+            <View className="flex-row justify-between items-center mb-2">
+              <View className="flex-1">
+                <Text className={`text-4xl font-bold ${textColor}`}>Complete</Text>
+                <Text className="text-sm text-muted">Your image is ready</Text>
+              </View>
+              <Pressable
+                onPress={toggleTheme}
+                className={`w-12 h-12 rounded-full items-center justify-center ${
+                  isDarkMode ? 'bg-slate-800' : 'bg-slate-200'
+                }`}
+              >
+                <Text className="text-xl">{isDarkMode ? '☀️' : '🌙'}</Text>
+              </Pressable>
             </View>
 
-            <View className="bg-white/40 dark:bg-slate-900/30 backdrop-blur-md rounded-3xl p-5 border border-white/20 dark:border-slate-700/30 shadow-lg items-center justify-center overflow-hidden">
+            <View
+              className={`${cardBg} backdrop-blur-md rounded-3xl p-5 border border-white/20 dark:border-slate-700/30 shadow-lg items-center justify-center overflow-hidden`}
+            >
               <Image
                 source={{ uri: scaledImage.uri }}
                 style={{
@@ -243,7 +305,9 @@ export default function HomeScreen() {
               />
             </View>
 
-            <View className="bg-white/40 dark:bg-slate-900/30 backdrop-blur-md rounded-3xl p-5 border border-white/20 dark:border-slate-700/30 gap-4">
+            <View
+              className={`${cardBg} backdrop-blur-md rounded-3xl p-5 border border-white/20 dark:border-slate-700/30 gap-4`}
+            >
               <View className="flex-row justify-between items-center">
                 <Text className="text-sm text-muted font-medium">Dimensions</Text>
                 <Text className="text-sm font-bold text-primary">
@@ -280,24 +344,45 @@ export default function HomeScreen() {
             <View className="gap-3 mt-2">
               <Pressable
                 onPress={saveToGallery}
-                className="bg-gradient-to-r from-primary to-cyan-400 rounded-2xl py-4 items-center active:opacity-80"
+                disabled={actionInProgress === 'save'}
+                className={`bg-gradient-to-r from-primary to-cyan-400 rounded-2xl py-4 items-center justify-center ${
+                  actionInProgress === 'save' ? 'opacity-60' : 'active:opacity-80'
+                }`}
               >
-                <Text className="text-white font-bold text-base">Save to Gallery</Text>
+                {actionInProgress === 'save' ? (
+                  <ActivityIndicator color="white" size="small" />
+                ) : (
+                  <Text className="text-white font-bold text-base">Save to Gallery</Text>
+                )}
               </Pressable>
 
               <View className="flex-row gap-3">
                 <Pressable
                   onPress={shareImage}
-                  className="flex-1 bg-white/40 dark:bg-slate-900/30 backdrop-blur-md rounded-2xl py-4 items-center border border-white/20 dark:border-slate-700/30 active:opacity-70"
+                  disabled={actionInProgress === 'share'}
+                  className={`flex-1 ${cardBg} backdrop-blur-md rounded-2xl py-4 items-center justify-center border border-white/20 dark:border-slate-700/30 ${
+                    actionInProgress === 'share' ? 'opacity-60' : 'active:opacity-70'
+                  }`}
                 >
-                  <Text className="text-primary font-semibold text-sm">Share</Text>
+                  {actionInProgress === 'share' ? (
+                    <ActivityIndicator color="#00D9FF" size="small" />
+                  ) : (
+                    <Text className="text-primary font-semibold text-sm">Share</Text>
+                  )}
                 </Pressable>
 
                 <Pressable
                   onPress={downloadImage}
-                  className="flex-1 bg-white/40 dark:bg-slate-900/30 backdrop-blur-md rounded-2xl py-4 items-center border border-white/20 dark:border-slate-700/30 active:opacity-70"
+                  disabled={actionInProgress === 'download'}
+                  className={`flex-1 ${cardBg} backdrop-blur-md rounded-2xl py-4 items-center justify-center border border-white/20 dark:border-slate-700/30 ${
+                    actionInProgress === 'download' ? 'opacity-60' : 'active:opacity-70'
+                  }`}
                 >
-                  <Text className="text-primary font-semibold text-sm">Download</Text>
+                  {actionInProgress === 'download' ? (
+                    <ActivityIndicator color="#00D9FF" size="small" />
+                  ) : (
+                    <Text className="text-primary font-semibold text-sm">Download</Text>
+                  )}
                 </Pressable>
               </View>
 
@@ -306,7 +391,7 @@ export default function HomeScreen() {
                   setShowResults(false);
                   setScaledImage(null);
                 }}
-                className="bg-white/20 dark:bg-slate-900/20 backdrop-blur-md rounded-2xl py-4 items-center border border-white/10 dark:border-slate-700/20 active:opacity-70"
+                className={`${cardBg} backdrop-blur-md rounded-2xl py-4 items-center border border-white/10 dark:border-slate-700/20 active:opacity-70`}
               >
                 <Text className="text-foreground font-semibold text-base">Back</Text>
               </Pressable>
@@ -318,12 +403,25 @@ export default function HomeScreen() {
   }
 
   return (
-    <ScreenContainer className="p-4 bg-gradient-to-br from-background via-background to-primary/5">
+    <ScreenContainer
+      className="p-4"
+      containerClassName={isDarkMode ? 'bg-slate-950' : 'bg-slate-50'}
+    >
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false}>
         <View className="flex-1 gap-6">
-          <View className="items-center gap-3 mt-2">
-            <Text className="text-5xl font-black text-foreground">Scaler</Text>
-            <Text className="text-sm text-muted font-medium">Resize images instantly</Text>
+          <View className="flex-row justify-between items-center">
+            <View className="flex-1">
+              <Text className={`text-5xl font-black ${textColor}`}>Scaler</Text>
+              <Text className="text-sm text-muted font-medium">Resize images instantly</Text>
+            </View>
+            <Pressable
+              onPress={toggleTheme}
+              className={`w-12 h-12 rounded-full items-center justify-center ${
+                isDarkMode ? 'bg-slate-800' : 'bg-slate-200'
+              }`}
+            >
+              <Text className="text-xl">{isDarkMode ? '☀️' : '🌙'}</Text>
+            </Pressable>
           </View>
 
           <Pressable
@@ -335,7 +433,9 @@ export default function HomeScreen() {
 
           {selectedImage && (
             <>
-              <View className="bg-white/40 dark:bg-slate-900/30 backdrop-blur-md rounded-3xl p-5 border border-white/20 dark:border-slate-700/30 gap-4">
+              <View
+                className={`${cardBg} backdrop-blur-md rounded-3xl p-5 border border-white/20 dark:border-slate-700/30 gap-4`}
+              >
                 <View className="items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5 rounded-2xl h-56 overflow-hidden">
                   <Image
                     source={{ uri: selectedImage.uri }}
@@ -363,8 +463,10 @@ export default function HomeScreen() {
                 </View>
               </View>
 
-              <View className="bg-white/40 dark:bg-slate-900/30 backdrop-blur-md rounded-3xl p-5 border border-white/20 dark:border-slate-700/30 gap-4">
-                <Text className="text-lg font-bold text-foreground">Scale Settings</Text>
+              <View
+                className={`${cardBg} backdrop-blur-md rounded-3xl p-5 border border-white/20 dark:border-slate-700/30 gap-4`}
+              >
+                <Text className={`text-lg font-bold ${textColor}`}>Scale Settings</Text>
 
                 <View className="gap-2">
                   <Text className="text-xs text-muted font-semibold uppercase">Width (px)</Text>
@@ -374,7 +476,7 @@ export default function HomeScreen() {
                     placeholder="800"
                     placeholderTextColor="#94A3B8"
                     keyboardType="number-pad"
-                    className="bg-white/20 dark:bg-slate-900/20 border border-white/20 dark:border-slate-700/30 rounded-xl px-4 py-3 text-foreground text-base font-semibold"
+                    className={`${isDarkMode ? 'bg-slate-900/20 text-white' : 'bg-white/20 text-slate-900'} border border-white/20 dark:border-slate-700/30 rounded-xl px-4 py-3 text-base font-semibold`}
                   />
                 </View>
 
@@ -387,7 +489,7 @@ export default function HomeScreen() {
                     placeholderTextColor="#94A3B8"
                     keyboardType="number-pad"
                     editable={!maintainAspectRatio}
-                    className={`bg-white/20 dark:bg-slate-900/20 border border-white/20 dark:border-slate-700/30 rounded-xl px-4 py-3 text-foreground text-base font-semibold ${
+                    className={`${isDarkMode ? 'bg-slate-900/20 text-white' : 'bg-white/20 text-slate-900'} border border-white/20 dark:border-slate-700/30 rounded-xl px-4 py-3 text-base font-semibold ${
                       !maintainAspectRatio ? '' : 'opacity-50'
                     }`}
                   />
@@ -408,7 +510,9 @@ export default function HomeScreen() {
                       <Text className="text-white font-bold text-sm">✓</Text>
                     )}
                   </View>
-                  <Text className="text-sm text-foreground font-semibold">Maintain Aspect Ratio</Text>
+                  <Text className={`text-sm font-semibold ${textColor}`}>
+                    Maintain Aspect Ratio
+                  </Text>
                 </Pressable>
               </View>
 
