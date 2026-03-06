@@ -98,4 +98,4 @@
 
 ## Mobile Issues
 
-- [x] Fix image picker on phone (Select Image button not working)
+- [x] CRITICAL: Fix image picker on phone - completely rewritten with better error handling and logging

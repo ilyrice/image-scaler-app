@@ -17,8 +17,6 @@ import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
 import { ScreenContainer } from '@/components/screen-container';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useColors } from '@/hooks/use-colors';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 interface PickedImage {
@@ -38,7 +36,6 @@ interface ScaledImage {
 
 export default function HomeScreen() {
   const colorScheme = useColorScheme();
-  const colors = useColors();
   const [selectedImage, setSelectedImage] = useState<PickedImage | null>(null);
   const [scaledImage, setScaledImage] = useState<ScaledImage | null>(null);
   const [targetWidth, setTargetWidth] = useState('800');
@@ -52,18 +49,25 @@ export default function HomeScreen() {
   useEffect(() => {
     (async () => {
       if (Platform.OS !== 'web') {
-        const { status: libraryStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        const { status: mediaStatus } = await MediaLibrary.requestPermissionsAsync();
-        if (libraryStatus !== 'granted' || mediaStatus !== 'granted') {
-          Alert.alert('Permission Required', 'Please allow access to your photo library');
+        try {
+          const { status: libraryStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          console.log('Library permission status:', libraryStatus);
+        } catch (error) {
+          console.error('Error requesting library permissions:', error);
+        }
+
+        try {
+          const { status: mediaStatus } = await MediaLibrary.requestPermissionsAsync();
+          console.log('Media library permission status:', mediaStatus);
+        } catch (error) {
+          console.error('Error requesting media permissions:', error);
         }
       }
     })();
   }, []);
 
-  const toggleTheme = async () => {
-    const newTheme = !isDarkMode;
-    setIsDarkMode(newTheme);
+  const toggleTheme = () => {
+    setIsDarkMode(!isDarkMode);
   };
 
   const triggerHaptic = async () => {
@@ -71,38 +75,39 @@ export default function HomeScreen() {
       try {
         await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       } catch (e) {
-        // Haptics not available
+        console.error('Haptics error:', e);
       }
     }
   };
 
   const pickImage = async () => {
     try {
+      console.log('Starting image picker...');
       await triggerHaptic();
-      
-      if (Platform.OS !== 'web') {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') {
-          Alert.alert('Permission Denied', 'Please allow access to your photo library.');
-          return;
-        }
-      }
-      
+
+      console.log('Launching image library...');
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: false,
         quality: 1,
       });
 
-      if (!result.canceled && result.assets[0]) {
+      console.log('Image picker result:', result);
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
+        console.log('Selected asset:', asset);
+
         let fileSize = 0;
         try {
           const fileInfo = await FileSystem.getInfoAsync(asset.uri);
           fileSize = (fileInfo as any).size || 0;
+          console.log('File size:', fileSize);
         } catch (e) {
+          console.error('Error getting file size:', e);
           fileSize = 0;
         }
+
         setSelectedImage({
           uri: asset.uri,
           width: asset.width,
@@ -111,10 +116,13 @@ export default function HomeScreen() {
         });
         setScaledImage(null);
         setShowResults(false);
+        console.log('Image selected successfully');
+      } else {
+        console.log('Image selection was canceled');
       }
     } catch (error: any) {
       console.error('Image picker error:', error);
-      Alert.alert('Error', error?.message || 'Failed to pick image');
+      Alert.alert('Error', `Failed to pick image: ${error?.message || 'Unknown error'}`);
     }
   };
 
@@ -190,7 +198,7 @@ export default function HomeScreen() {
         try {
           await MediaLibrary.createAlbumAsync('Scaled Images', asset, false);
         } catch (e) {
-          // Album might already exist
+          console.error('Album creation error:', e);
         }
         Alert.alert('✅ Success', 'Image saved to gallery!');
       } else {
@@ -459,7 +467,7 @@ export default function HomeScreen() {
             onPress={pickImage}
             className="bg-gradient-to-r from-primary to-cyan-400 rounded-2xl py-4 items-center shadow-lg active:opacity-90"
           >
-            <Text className="text-white font-bold text-base">Select Image</Text>
+            <Text className="text-white font-bold text-base">📸 Select Image</Text>
           </Pressable>
 
           {/* Ad Space 1 */}
@@ -600,7 +608,7 @@ export default function HomeScreen() {
                 {isScaling ? (
                   <ActivityIndicator color="white" size="small" />
                 ) : (
-                  <Text className="text-white font-bold text-base">Scale Image</Text>
+                  <Text className="text-white font-bold text-base">⚡ Scale Image</Text>
                 )}
               </Pressable>
             </>
