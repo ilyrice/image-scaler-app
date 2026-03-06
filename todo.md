@@ -94,3 +94,8 @@
 - [x] Redesign home UI for cleaner appearance
 - [x] Add ad space placeholder in home UI
 - [x] Test all buttons and theme switching
+
+
+## Mobile Issues
+
+- [x] Fix image picker on phone (Select Image button not working)

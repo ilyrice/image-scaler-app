@@ -79,6 +79,15 @@ export default function HomeScreen() {
   const pickImage = async () => {
     try {
       await triggerHaptic();
+      
+      if (Platform.OS !== 'web') {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission Denied', 'Please allow access to your photo library.');
+          return;
+        }
+      }
+      
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: false,
@@ -103,9 +112,9 @@ export default function HomeScreen() {
         setScaledImage(null);
         setShowResults(false);
       }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to pick image');
-      console.error(error);
+    } catch (error: any) {
+      console.error('Image picker error:', error);
+      Alert.alert('Error', error?.message || 'Failed to pick image');
     }
   };
 
