@@ -9,12 +9,14 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  Pressable,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
+import * as Haptics from 'expo-haptics';
 import { ScreenContainer } from '@/components/screen-container';
 
 interface PickedImage {
@@ -41,7 +43,6 @@ export default function HomeScreen() {
   const [isScaling, setIsScaling] = useState(false);
   const [showResults, setShowResults] = useState(false);
 
-  // Request permissions on mount
   useEffect(() => {
     (async () => {
       if (Platform.OS !== 'web') {
@@ -54,8 +55,19 @@ export default function HomeScreen() {
     })();
   }, []);
 
+  const triggerHaptic = async () => {
+    if (Platform.OS !== 'web') {
+      try {
+        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      } catch (e) {
+        // Haptics not available
+      }
+    }
+  };
+
   const pickImage = async () => {
     try {
+      await triggerHaptic();
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: false,
@@ -69,7 +81,6 @@ export default function HomeScreen() {
           const fileInfo = await FileSystem.getInfoAsync(asset.uri);
           fileSize = (fileInfo as any).size || 0;
         } catch (e) {
-          // File size may not be available on all platforms
           fileSize = 0;
         }
         setSelectedImage({
@@ -102,6 +113,7 @@ export default function HomeScreen() {
     }
 
     setIsScaling(true);
+    await triggerHaptic();
     try {
       const actions = maintainAspectRatio
         ? [{ resize: { width } }]
@@ -118,11 +130,9 @@ export default function HomeScreen() {
         const fileInfo = await FileSystem.getInfoAsync(result.uri);
         newSize = (fileInfo as any).size || 0;
       } catch (e) {
-        // File size may not be available on all platforms
         newSize = 0;
       }
 
-      // Get dimensions of scaled image
       Image.getSize(
         result.uri,
         (newWidth, newHeight) => {
@@ -152,6 +162,7 @@ export default function HomeScreen() {
     if (!scaledImage) return;
 
     try {
+      await triggerHaptic();
       if (Platform.OS !== 'web') {
         const asset = await MediaLibrary.createAssetAsync(scaledImage.uri);
         await MediaLibrary.createAlbumAsync('Scaled Images', asset, false);
@@ -167,6 +178,7 @@ export default function HomeScreen() {
     if (!scaledImage) return;
 
     try {
+      await triggerHaptic();
       if (Platform.OS === 'web') {
         if (!(await Sharing.isAvailableAsync())) {
           Alert.alert('Error', 'Sharing is not available on this platform');
@@ -184,12 +196,12 @@ export default function HomeScreen() {
     if (!scaledImage) return;
 
     try {
+      await triggerHaptic();
       const timestamp = Date.now();
       const filename = `scaled-image-${timestamp}.jpg`;
       const docDir = (FileSystem as any).documentDirectory || (FileSystem as any).cacheDirectory;
       const downloadPath = docDir + filename;
 
-      // Copy the scaled image to downloads
       await FileSystem.copyAsync({
         from: scaledImage.uri,
         to: downloadPath,
@@ -212,50 +224,50 @@ export default function HomeScreen() {
 
   if (showResults && scaledImage) {
     return (
-      <ScreenContainer className="p-4">
-        <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-          <View className="flex-1 gap-4">
-            {/* Header */}
-            <View className="items-center gap-2 mb-4">
-              <Text className="text-3xl font-bold text-foreground">Scaled Image</Text>
-              <Text className="text-sm text-muted">Preview and save your result</Text>
+      <ScreenContainer className="p-4 bg-gradient-to-br from-background via-background to-primary/5">
+        <ScrollView contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false}>
+          <View className="flex-1 gap-5">
+            <View className="items-center gap-2 mb-2">
+              <Text className="text-4xl font-bold text-foreground">Complete</Text>
+              <Text className="text-sm text-muted">Your image is ready</Text>
             </View>
 
-            {/* Image Preview */}
-            <View className="bg-surface rounded-2xl p-4 items-center justify-center border border-border">
+            <View className="bg-white/40 dark:bg-slate-900/30 backdrop-blur-md rounded-3xl p-5 border border-white/20 dark:border-slate-700/30 shadow-lg items-center justify-center overflow-hidden">
               <Image
                 source={{ uri: scaledImage.uri }}
                 style={{
                   width: '100%',
-                  height: 300,
+                  height: 280,
                   resizeMode: 'contain',
                 }}
               />
             </View>
 
-            {/* Dimensions Info */}
-            <View className="bg-surface rounded-xl p-4 border border-border gap-3">
-              <View className="flex-row justify-between">
-                <Text className="text-sm text-muted">New Dimensions:</Text>
-                <Text className="text-sm font-semibold text-foreground">
+            <View className="bg-white/40 dark:bg-slate-900/30 backdrop-blur-md rounded-3xl p-5 border border-white/20 dark:border-slate-700/30 gap-4">
+              <View className="flex-row justify-between items-center">
+                <Text className="text-sm text-muted font-medium">Dimensions</Text>
+                <Text className="text-sm font-bold text-primary">
                   {scaledImage.width} × {scaledImage.height}px
                 </Text>
               </View>
-              <View className="flex-row justify-between">
-                <Text className="text-sm text-muted">Original Size:</Text>
+              <View className="h-px bg-white/10 dark:bg-slate-700/20" />
+              <View className="flex-row justify-between items-center">
+                <Text className="text-sm text-muted font-medium">Original</Text>
                 <Text className="text-sm font-semibold text-foreground">
                   {formatFileSize(scaledImage.originalSize)}
                 </Text>
               </View>
-              <View className="flex-row justify-between">
-                <Text className="text-sm text-muted">New Size:</Text>
-                <Text className="text-sm font-semibold text-foreground">
+              <View className="h-px bg-white/10 dark:bg-slate-700/20" />
+              <View className="flex-row justify-between items-center">
+                <Text className="text-sm text-muted font-medium">Optimized</Text>
+                <Text className="text-sm font-semibold text-success">
                   {formatFileSize(scaledImage.newSize)}
                 </Text>
               </View>
-              <View className="flex-row justify-between">
-                <Text className="text-sm text-muted">Reduction:</Text>
-                <Text className="text-sm font-semibold text-success">
+              <View className="h-px bg-white/10 dark:bg-slate-700/20" />
+              <View className="flex-row justify-between items-center">
+                <Text className="text-sm text-muted font-medium">Reduction</Text>
+                <Text className="text-sm font-bold text-success">
                   {Math.round(
                     ((scaledImage.originalSize - scaledImage.newSize) /
                       scaledImage.originalSize) *
@@ -265,42 +277,39 @@ export default function HomeScreen() {
               </View>
             </View>
 
-            {/* Action Buttons */}
-            <View className="gap-3 mt-4">
-              <TouchableOpacity
+            <View className="gap-3 mt-2">
+              <Pressable
                 onPress={saveToGallery}
-                style={{ opacity: 1 }}
-                className="bg-primary rounded-xl py-3 items-center"
+                className="bg-gradient-to-r from-primary to-cyan-400 rounded-2xl py-4 items-center active:opacity-80"
               >
-                <Text className="text-background font-semibold text-base">Save to Gallery</Text>
-              </TouchableOpacity>
+                <Text className="text-white font-bold text-base">Save to Gallery</Text>
+              </Pressable>
 
-              <TouchableOpacity
-                onPress={shareImage}
-                style={{ opacity: 1 }}
-                className="bg-surface rounded-xl py-3 items-center border border-primary"
-              >
-                <Text className="text-primary font-semibold text-base">Share</Text>
-              </TouchableOpacity>
+              <View className="flex-row gap-3">
+                <Pressable
+                  onPress={shareImage}
+                  className="flex-1 bg-white/40 dark:bg-slate-900/30 backdrop-blur-md rounded-2xl py-4 items-center border border-white/20 dark:border-slate-700/30 active:opacity-70"
+                >
+                  <Text className="text-primary font-semibold text-sm">Share</Text>
+                </Pressable>
 
-              <TouchableOpacity
-                onPress={downloadImage}
-                style={{ opacity: 1 }}
-                className="bg-surface rounded-xl py-3 items-center border border-primary"
-              >
-                <Text className="text-primary font-semibold text-base">Download</Text>
-              </TouchableOpacity>
+                <Pressable
+                  onPress={downloadImage}
+                  className="flex-1 bg-white/40 dark:bg-slate-900/30 backdrop-blur-md rounded-2xl py-4 items-center border border-white/20 dark:border-slate-700/30 active:opacity-70"
+                >
+                  <Text className="text-primary font-semibold text-sm">Download</Text>
+                </Pressable>
+              </View>
 
-              <TouchableOpacity
+              <Pressable
                 onPress={() => {
                   setShowResults(false);
                   setScaledImage(null);
                 }}
-                style={{ opacity: 1 }}
-                className="bg-surface rounded-xl py-3 items-center border border-border"
+                className="bg-white/20 dark:bg-slate-900/20 backdrop-blur-md rounded-2xl py-4 items-center border border-white/10 dark:border-slate-700/20 active:opacity-70"
               >
-                <Text className="text-foreground font-semibold text-base">Back to Home</Text>
-              </TouchableOpacity>
+                <Text className="text-foreground font-semibold text-base">Back</Text>
+              </Pressable>
             </View>
           </View>
         </ScrollView>
@@ -309,122 +318,114 @@ export default function HomeScreen() {
   }
 
   return (
-    <ScreenContainer className="p-4">
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
+    <ScreenContainer className="p-4 bg-gradient-to-br from-background via-background to-primary/5">
+      <ScrollView contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false}>
         <View className="flex-1 gap-6">
-          {/* Header */}
-          <View className="items-center gap-2">
-            <Text className="text-3xl font-bold text-foreground">Image Scaler</Text>
-            <Text className="text-sm text-muted text-center">Resize your images easily</Text>
+          <View className="items-center gap-3 mt-2">
+            <Text className="text-5xl font-black text-foreground">Scaler</Text>
+            <Text className="text-sm text-muted font-medium">Resize images instantly</Text>
           </View>
 
-          {/* Image Picker Button */}
-          <TouchableOpacity
+          <Pressable
             onPress={pickImage}
-            style={{ opacity: 1 }}
-            className="bg-primary rounded-2xl py-4 items-center"
+            className="bg-gradient-to-r from-primary to-cyan-400 rounded-3xl py-5 items-center shadow-lg active:opacity-90"
           >
-            <Text className="text-background font-semibold text-base">Select Image</Text>
-          </TouchableOpacity>
+            <Text className="text-white font-bold text-lg">Select Image</Text>
+          </Pressable>
 
-          {/* Selected Image Preview */}
           {selectedImage && (
-            <View className="bg-surface rounded-2xl p-4 border border-border gap-4">
-              <View className="items-center justify-center bg-background rounded-xl h-48">
-                <Image
-                  source={{ uri: selectedImage.uri }}
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    resizeMode: 'contain',
-                  }}
-                />
-              </View>
-              <View className="gap-2">
-                <View className="flex-row justify-between">
-                  <Text className="text-sm text-muted">Original Dimensions:</Text>
-                  <Text className="text-sm font-semibold text-foreground">
-                    {selectedImage.width} × {selectedImage.height}px
-                  </Text>
+            <>
+              <View className="bg-white/40 dark:bg-slate-900/30 backdrop-blur-md rounded-3xl p-5 border border-white/20 dark:border-slate-700/30 gap-4">
+                <View className="items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5 rounded-2xl h-56 overflow-hidden">
+                  <Image
+                    source={{ uri: selectedImage.uri }}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      resizeMode: 'contain',
+                    }}
+                  />
                 </View>
-                <View className="flex-row justify-between">
-                  <Text className="text-sm text-muted">File Size:</Text>
-                  <Text className="text-sm font-semibold text-foreground">
-                    {formatFileSize(selectedImage.size)}
-                  </Text>
+                <View className="gap-3">
+                  <View className="flex-row justify-between items-center">
+                    <Text className="text-xs text-muted font-semibold uppercase">Dimensions</Text>
+                    <Text className="text-sm font-bold text-primary">
+                      {selectedImage.width} × {selectedImage.height}
+                    </Text>
+                  </View>
+                  <View className="h-px bg-white/10 dark:bg-slate-700/20" />
+                  <View className="flex-row justify-between items-center">
+                    <Text className="text-xs text-muted font-semibold uppercase">File Size</Text>
+                    <Text className="text-sm font-semibold text-foreground">
+                      {formatFileSize(selectedImage.size)}
+                    </Text>
+                  </View>
                 </View>
               </View>
-            </View>
-          )}
 
-          {/* Scale Settings */}
-          {selectedImage && (
-            <View className="bg-surface rounded-2xl p-4 border border-border gap-4">
-              <Text className="text-lg font-semibold text-foreground">Scale Settings</Text>
+              <View className="bg-white/40 dark:bg-slate-900/30 backdrop-blur-md rounded-3xl p-5 border border-white/20 dark:border-slate-700/30 gap-4">
+                <Text className="text-lg font-bold text-foreground">Scale Settings</Text>
 
-              {/* Width Input */}
-              <View className="gap-2">
-                <Text className="text-sm text-muted">Target Width (px)</Text>
-                <TextInput
-                  value={targetWidth}
-                  onChangeText={setTargetWidth}
-                  placeholder="800"
-                  keyboardType="number-pad"
-                  className="bg-background border border-border rounded-lg px-4 py-3 text-foreground"
-                />
-              </View>
+                <View className="gap-2">
+                  <Text className="text-xs text-muted font-semibold uppercase">Width (px)</Text>
+                  <TextInput
+                    value={targetWidth}
+                    onChangeText={setTargetWidth}
+                    placeholder="800"
+                    placeholderTextColor="#94A3B8"
+                    keyboardType="number-pad"
+                    className="bg-white/20 dark:bg-slate-900/20 border border-white/20 dark:border-slate-700/30 rounded-xl px-4 py-3 text-foreground text-base font-semibold"
+                  />
+                </View>
 
-              {/* Height Input */}
-              <View className="gap-2">
-                <Text className="text-sm text-muted">Target Height (px)</Text>
-                <TextInput
-                  value={targetHeight}
-                  onChangeText={setTargetHeight}
-                  placeholder="600"
-                  keyboardType="number-pad"
-                  editable={!maintainAspectRatio}
-                  className={`bg-background border border-border rounded-lg px-4 py-3 text-foreground ${
-                    !maintainAspectRatio ? '' : 'opacity-50'
-                  }`}
-                />
-              </View>
+                <View className="gap-2">
+                  <Text className="text-xs text-muted font-semibold uppercase">Height (px)</Text>
+                  <TextInput
+                    value={targetHeight}
+                    onChangeText={setTargetHeight}
+                    placeholder="600"
+                    placeholderTextColor="#94A3B8"
+                    keyboardType="number-pad"
+                    editable={!maintainAspectRatio}
+                    className={`bg-white/20 dark:bg-slate-900/20 border border-white/20 dark:border-slate-700/30 rounded-xl px-4 py-3 text-foreground text-base font-semibold ${
+                      !maintainAspectRatio ? '' : 'opacity-50'
+                    }`}
+                  />
+                </View>
 
-              {/* Aspect Ratio Toggle */}
-              <TouchableOpacity
-                onPress={() => setMaintainAspectRatio(!maintainAspectRatio)}
-                style={{ opacity: 1 }}
-                className="flex-row items-center gap-3 py-2"
-              >
-                <View
-                  className={`w-6 h-6 rounded border-2 items-center justify-center ${
-                    maintainAspectRatio
-                      ? 'bg-primary border-primary'
-                      : 'border-border bg-background'
-                  }`}
+                <Pressable
+                  onPress={() => setMaintainAspectRatio(!maintainAspectRatio)}
+                  className="flex-row items-center gap-3 py-2 active:opacity-70"
                 >
-                  {maintainAspectRatio && (
-                    <Text className="text-background font-bold">✓</Text>
-                  )}
-                </View>
-                <Text className="text-sm text-foreground">Maintain Aspect Ratio</Text>
-              </TouchableOpacity>
-            </View>
-          )}
+                  <View
+                    className={`w-6 h-6 rounded-lg border-2 items-center justify-center ${
+                      maintainAspectRatio
+                        ? 'bg-gradient-to-r from-primary to-cyan-400 border-primary'
+                        : 'border-white/30 dark:border-slate-700/30 bg-white/10 dark:bg-slate-900/10'
+                    }`}
+                  >
+                    {maintainAspectRatio && (
+                      <Text className="text-white font-bold text-sm">✓</Text>
+                    )}
+                  </View>
+                  <Text className="text-sm text-foreground font-semibold">Maintain Aspect Ratio</Text>
+                </Pressable>
+              </View>
 
-          {/* Scale Button */}
-          {selectedImage && (
-            <TouchableOpacity
-              onPress={scaleImage}
-              disabled={isScaling}
-              style={{ opacity: isScaling ? 0.6 : 1 }}
-              className="bg-primary rounded-2xl py-4 items-center"
-            >
-              {isScaling ? (
-                <ActivityIndicator color="white" size="small" />
-              ) : (
-                <Text className="text-background font-semibold text-base">Scale Image</Text>
-              )}
-            </TouchableOpacity>
+              <Pressable
+                onPress={scaleImage}
+                disabled={isScaling}
+                className={`bg-gradient-to-r from-primary to-cyan-400 rounded-3xl py-5 items-center shadow-lg ${
+                  isScaling ? 'opacity-60' : 'active:opacity-90'
+                }`}
+              >
+                {isScaling ? (
+                  <ActivityIndicator color="white" size="small" />
+                ) : (
+                  <Text className="text-white font-bold text-lg">Scale Image</Text>
+                )}
+              </Pressable>
+            </>
           )}
         </View>
       </ScrollView>
