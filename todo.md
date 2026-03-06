@@ -61,3 +61,10 @@
 - [x] Implement card designs with subtle shadows
 - [ ] Add loading animations
 - [x] Polish overall UI/UX
+
+
+## Bug Fixes
+
+- [x] Fix home button display and functionality in tab bar
+- [x] Ensure tab bar icons render properly
+- [x] Fix tab bar styling and visibility
