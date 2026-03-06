@@ -137,7 +137,9 @@ export default function HomeScreen() {
         let fileSize = 0;
         try {
           const fileInfo = await FileSystem.getInfoAsync(asset.uri);
-          fileSize = (fileInfo as any).size || 0;
+          if (fileInfo && typeof fileInfo === 'object' && 'size' in fileInfo) {
+            fileSize = (fileInfo as any).size || 0;
+          }
           console.log('[PICKER] File size:', fileSize);
         } catch (e) {
           console.error('[PICKER] Error getting file size:', e);
@@ -198,9 +200,11 @@ export default function HomeScreen() {
       let newSize = 0;
       try {
         const fileInfo = await FileSystem.getInfoAsync(result.uri);
-        newSize = (fileInfo as any).size || 0;
+        if (fileInfo && typeof fileInfo === 'object' && 'size' in fileInfo) {
+          newSize = (fileInfo as any).size || 0;
+        }
       } catch (e) {
-        console.error('Error getting scaled file size:', e);
+        console.error('[SCALE] Error getting scaled file size:', e);
         newSize = 0;
       }
 
