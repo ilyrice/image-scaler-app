@@ -99,3 +99,4 @@
 ## Mobile Issues
 
 - [x] CRITICAL: Fix image picker on phone - completely rewritten with better error handling and logging
+- [x] Fix TypeScript error in useEffect permission requests

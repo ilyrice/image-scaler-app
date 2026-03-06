@@ -50,17 +50,10 @@ export default function HomeScreen() {
     (async () => {
       if (Platform.OS !== 'web') {
         try {
-          const { status: libraryStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-          console.log('Library permission status:', libraryStatus);
+          const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          console.log('Image picker permission status:', status);
         } catch (error) {
-          console.error('Error requesting library permissions:', error);
-        }
-
-        try {
-          const { status: mediaStatus } = await MediaLibrary.requestPermissionsAsync();
-          console.log('Media library permission status:', mediaStatus);
-        } catch (error) {
-          console.error('Error requesting media permissions:', error);
+          console.error('Error requesting permissions:', error);
         }
       }
     })();
