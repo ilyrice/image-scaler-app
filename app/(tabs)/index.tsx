@@ -9,7 +9,6 @@ import {
   Alert,
   Platform,
   Pressable,
-  useColorScheme,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -19,6 +18,8 @@ import * as FileSystem from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
 import { ScreenContainer } from '@/components/screen-container';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useColors } from '@/hooks/use-colors';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 
 interface PickedImage {
   uri: string;
@@ -36,7 +37,8 @@ interface ScaledImage {
 }
 
 export default function HomeScreen() {
-  const systemColorScheme = useColorScheme();
+  const colorScheme = useColorScheme();
+  const colors = useColors();
   const [selectedImage, setSelectedImage] = useState<PickedImage | null>(null);
   const [scaledImage, setScaledImage] = useState<ScaledImage | null>(null);
   const [targetWidth, setTargetWidth] = useState('800');
@@ -44,7 +46,7 @@ export default function HomeScreen() {
   const [maintainAspectRatio, setMaintainAspectRatio] = useState(true);
   const [isScaling, setIsScaling] = useState(false);
   const [showResults, setShowResults] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(systemColorScheme === 'dark');
+  const [isDarkMode, setIsDarkMode] = useState(colorScheme === 'dark');
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
 
   useEffect(() => {
@@ -56,26 +58,12 @@ export default function HomeScreen() {
           Alert.alert('Permission Required', 'Please allow access to your photo library');
         }
       }
-      // Load saved theme preference
-      try {
-        const savedTheme = await AsyncStorage.getItem('app-theme');
-        if (savedTheme) {
-          setIsDarkMode(savedTheme === 'dark');
-        }
-      } catch (e) {
-        console.error('Failed to load theme:', e);
-      }
     })();
   }, []);
 
   const toggleTheme = async () => {
     const newTheme = !isDarkMode;
     setIsDarkMode(newTheme);
-    try {
-      await AsyncStorage.setItem('app-theme', newTheme ? 'dark' : 'light');
-    } catch (e) {
-      console.error('Failed to save theme:', e);
-    }
   };
 
   const triggerHaptic = async () => {
@@ -195,12 +183,12 @@ export default function HomeScreen() {
         } catch (e) {
           // Album might already exist
         }
-        Alert.alert('Success', 'Image saved to gallery!');
+        Alert.alert('✅ Success', 'Image saved to gallery!');
       } else {
         Alert.alert('Info', 'Save to gallery is not available on web');
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to save image to gallery');
+      Alert.alert('❌ Error', 'Failed to save image to gallery');
       console.error('Save to gallery error:', error);
     } finally {
       setActionInProgress(null);
@@ -216,15 +204,16 @@ export default function HomeScreen() {
       const isAvailable = await Sharing.isAvailableAsync();
       if (!isAvailable) {
         Alert.alert('Error', 'Sharing is not available on this platform');
+        setActionInProgress(null);
         return;
       }
       await Sharing.shareAsync(scaledImage.uri, {
         mimeType: 'image/jpeg',
         dialogTitle: 'Share Scaled Image',
       });
-    } catch (error) {
-      if ((error as any).message !== 'User did not share') {
-        Alert.alert('Error', 'Failed to share image');
+    } catch (error: any) {
+      if (error?.message !== 'User did not share') {
+        Alert.alert('❌ Error', 'Failed to share image');
         console.error('Share error:', error);
       }
     } finally {
@@ -248,9 +237,9 @@ export default function HomeScreen() {
         to: downloadPath,
       });
 
-      Alert.alert('Success', `Image saved to: ${filename}`);
+      Alert.alert('✅ Success', `Image saved to: ${filename}`);
     } catch (error) {
-      Alert.alert('Error', 'Failed to download image');
+      Alert.alert('❌ Error', 'Failed to download image');
       console.error('Download error:', error);
     } finally {
       setActionInProgress(null);
@@ -265,94 +254,113 @@ export default function HomeScreen() {
     return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
   };
 
-  const bgColor = isDarkMode ? '#0A0E27' : '#F8FAFC';
-  const cardBg = isDarkMode ? 'bg-slate-900/30' : 'bg-white/40';
-  const textColor = isDarkMode ? 'text-slate-100' : 'text-slate-900';
-
+  // Results Screen
   if (showResults && scaledImage) {
     return (
-      <ScreenContainer
-        className="p-4"
-        containerClassName={isDarkMode ? 'bg-slate-950' : 'bg-slate-50'}
-      >
+      <ScreenContainer className="p-4" containerClassName={isDarkMode ? 'bg-slate-950' : 'bg-white'}>
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false}>
-          <View className="flex-1 gap-5">
+          <View className="flex-1 gap-4">
+            {/* Header */}
             <View className="flex-row justify-between items-center mb-2">
-              <View className="flex-1">
-                <Text className={`text-4xl font-bold ${textColor}`}>Complete</Text>
-                <Text className="text-sm text-muted">Your image is ready</Text>
+              <View>
+                <Text className={`text-3xl font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                  Done!
+                </Text>
+                <Text className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                  Ready to use
+                </Text>
               </View>
               <Pressable
                 onPress={toggleTheme}
-                className={`w-12 h-12 rounded-full items-center justify-center ${
-                  isDarkMode ? 'bg-slate-800' : 'bg-slate-200'
+                className={`w-10 h-10 rounded-full items-center justify-center ${
+                  isDarkMode ? 'bg-slate-800' : 'bg-slate-100'
                 }`}
               >
-                <Text className="text-xl">{isDarkMode ? '☀️' : '🌙'}</Text>
+                <Text className="text-lg">{isDarkMode ? '☀️' : '🌙'}</Text>
               </Pressable>
             </View>
 
+            {/* Image Preview */}
             <View
-              className={`${cardBg} backdrop-blur-md rounded-3xl p-5 border border-white/20 dark:border-slate-700/30 shadow-lg items-center justify-center overflow-hidden`}
+              className={`rounded-2xl p-3 overflow-hidden ${
+                isDarkMode ? 'bg-slate-900' : 'bg-slate-100'
+              }`}
             >
               <Image
                 source={{ uri: scaledImage.uri }}
                 style={{
                   width: '100%',
-                  height: 280,
+                  height: 240,
                   resizeMode: 'contain',
                 }}
               />
             </View>
 
-            <View
-              className={`${cardBg} backdrop-blur-md rounded-3xl p-5 border border-white/20 dark:border-slate-700/30 gap-4`}
-            >
+            {/* Stats */}
+            <View className={`rounded-2xl p-4 gap-3 ${isDarkMode ? 'bg-slate-900' : 'bg-slate-100'}`}>
               <View className="flex-row justify-between items-center">
-                <Text className="text-sm text-muted font-medium">Dimensions</Text>
-                <Text className="text-sm font-bold text-primary">
+                <Text className={`text-xs font-semibold ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                  SIZE
+                </Text>
+                <Text className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
                   {scaledImage.width} × {scaledImage.height}px
                 </Text>
               </View>
-              <View className="h-px bg-white/10 dark:bg-slate-700/20" />
+              <View className={`h-px ${isDarkMode ? 'bg-slate-800' : 'bg-slate-200'}`} />
               <View className="flex-row justify-between items-center">
-                <Text className="text-sm text-muted font-medium">Original</Text>
-                <Text className="text-sm font-semibold text-foreground">
+                <Text className={`text-xs font-semibold ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                  BEFORE
+                </Text>
+                <Text className={`text-sm font-semibold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
                   {formatFileSize(scaledImage.originalSize)}
                 </Text>
               </View>
-              <View className="h-px bg-white/10 dark:bg-slate-700/20" />
+              <View className={`h-px ${isDarkMode ? 'bg-slate-800' : 'bg-slate-200'}`} />
               <View className="flex-row justify-between items-center">
-                <Text className="text-sm text-muted font-medium">Optimized</Text>
-                <Text className="text-sm font-semibold text-success">
+                <Text className={`text-xs font-semibold ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                  AFTER
+                </Text>
+                <Text className="text-sm font-bold text-green-500">
                   {formatFileSize(scaledImage.newSize)}
                 </Text>
               </View>
-              <View className="h-px bg-white/10 dark:bg-slate-700/20" />
+              <View className={`h-px ${isDarkMode ? 'bg-slate-800' : 'bg-slate-200'}`} />
               <View className="flex-row justify-between items-center">
-                <Text className="text-sm text-muted font-medium">Reduction</Text>
-                <Text className="text-sm font-bold text-success">
+                <Text className={`text-xs font-semibold ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                  SAVED
+                </Text>
+                <Text className="text-sm font-bold text-green-500">
                   {Math.round(
-                    ((scaledImage.originalSize - scaledImage.newSize) /
-                      scaledImage.originalSize) *
-                      100
+                    ((scaledImage.originalSize - scaledImage.newSize) / scaledImage.originalSize) * 100
                   )}%
                 </Text>
               </View>
             </View>
 
+            {/* Ad Space */}
+            <View
+              className={`rounded-2xl p-4 items-center justify-center h-24 ${
+                isDarkMode ? 'bg-slate-900' : 'bg-slate-100'
+              } border-2 border-dashed ${isDarkMode ? 'border-slate-700' : 'border-slate-300'}`}
+            >
+              <Text className={`text-xs font-semibold ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                📢 Ad Space
+              </Text>
+            </View>
+
+            {/* Action Buttons */}
             <View className="gap-3 mt-2">
               <Pressable
                 onPress={saveToGallery}
                 disabled={actionInProgress === 'save'}
-                className={`bg-gradient-to-r from-primary to-cyan-400 rounded-2xl py-4 items-center justify-center ${
+                className={`bg-gradient-to-r from-primary to-cyan-400 rounded-xl py-3 items-center justify-center ${
                   actionInProgress === 'save' ? 'opacity-60' : 'active:opacity-80'
                 }`}
               >
                 {actionInProgress === 'save' ? (
                   <ActivityIndicator color="white" size="small" />
                 ) : (
-                  <Text className="text-white font-bold text-base">Save to Gallery</Text>
+                  <Text className="text-white font-bold text-sm">Save to Gallery</Text>
                 )}
               </Pressable>
 
@@ -360,28 +368,32 @@ export default function HomeScreen() {
                 <Pressable
                   onPress={shareImage}
                   disabled={actionInProgress === 'share'}
-                  className={`flex-1 ${cardBg} backdrop-blur-md rounded-2xl py-4 items-center justify-center border border-white/20 dark:border-slate-700/30 ${
-                    actionInProgress === 'share' ? 'opacity-60' : 'active:opacity-70'
-                  }`}
+                  className={`flex-1 rounded-xl py-3 items-center justify-center border-2 ${
+                    isDarkMode
+                      ? 'bg-slate-900 border-slate-700'
+                      : 'bg-slate-100 border-slate-300'
+                  } ${actionInProgress === 'share' ? 'opacity-60' : 'active:opacity-70'}`}
                 >
                   {actionInProgress === 'share' ? (
                     <ActivityIndicator color="#00D9FF" size="small" />
                   ) : (
-                    <Text className="text-primary font-semibold text-sm">Share</Text>
+                    <Text className="text-primary font-bold text-sm">Share</Text>
                   )}
                 </Pressable>
 
                 <Pressable
                   onPress={downloadImage}
                   disabled={actionInProgress === 'download'}
-                  className={`flex-1 ${cardBg} backdrop-blur-md rounded-2xl py-4 items-center justify-center border border-white/20 dark:border-slate-700/30 ${
-                    actionInProgress === 'download' ? 'opacity-60' : 'active:opacity-70'
-                  }`}
+                  className={`flex-1 rounded-xl py-3 items-center justify-center border-2 ${
+                    isDarkMode
+                      ? 'bg-slate-900 border-slate-700'
+                      : 'bg-slate-100 border-slate-300'
+                  } ${actionInProgress === 'download' ? 'opacity-60' : 'active:opacity-70'}`}
                 >
                   {actionInProgress === 'download' ? (
                     <ActivityIndicator color="#00D9FF" size="small" />
                   ) : (
-                    <Text className="text-primary font-semibold text-sm">Download</Text>
+                    <Text className="text-primary font-bold text-sm">Download</Text>
                   )}
                 </Pressable>
               </View>
@@ -391,9 +403,15 @@ export default function HomeScreen() {
                   setShowResults(false);
                   setScaledImage(null);
                 }}
-                className={`${cardBg} backdrop-blur-md rounded-2xl py-4 items-center border border-white/10 dark:border-slate-700/20 active:opacity-70`}
+                className={`rounded-xl py-3 items-center border-2 ${
+                  isDarkMode
+                    ? 'bg-slate-900 border-slate-700'
+                    : 'bg-slate-100 border-slate-300'
+                } active:opacity-70`}
               >
-                <Text className="text-foreground font-semibold text-base">Back</Text>
+                <Text className={`font-bold text-sm ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                  Back
+                </Text>
               </Pressable>
             </View>
           </View>
@@ -402,131 +420,178 @@ export default function HomeScreen() {
     );
   }
 
+  // Home Screen
   return (
-    <ScreenContainer
-      className="p-4"
-      containerClassName={isDarkMode ? 'bg-slate-950' : 'bg-slate-50'}
-    >
+    <ScreenContainer className="p-4" containerClassName={isDarkMode ? 'bg-slate-950' : 'bg-white'}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false}>
-        <View className="flex-1 gap-6">
-          <View className="flex-row justify-between items-center">
-            <View className="flex-1">
-              <Text className={`text-5xl font-black ${textColor}`}>Scaler</Text>
-              <Text className="text-sm text-muted font-medium">Resize images instantly</Text>
+        <View className="flex-1 gap-4">
+          {/* Header */}
+          <View className="flex-row justify-between items-center mb-2">
+            <View>
+              <Text className={`text-4xl font-black ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                Scaler
+              </Text>
+              <Text className={`text-xs font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                Resize instantly
+              </Text>
             </View>
             <Pressable
               onPress={toggleTheme}
-              className={`w-12 h-12 rounded-full items-center justify-center ${
-                isDarkMode ? 'bg-slate-800' : 'bg-slate-200'
+              className={`w-10 h-10 rounded-full items-center justify-center ${
+                isDarkMode ? 'bg-slate-800' : 'bg-slate-100'
               }`}
             >
-              <Text className="text-xl">{isDarkMode ? '☀️' : '🌙'}</Text>
+              <Text className="text-lg">{isDarkMode ? '☀️' : '🌙'}</Text>
             </Pressable>
           </View>
 
+          {/* Primary CTA */}
           <Pressable
             onPress={pickImage}
-            className="bg-gradient-to-r from-primary to-cyan-400 rounded-3xl py-5 items-center shadow-lg active:opacity-90"
+            className="bg-gradient-to-r from-primary to-cyan-400 rounded-2xl py-4 items-center shadow-lg active:opacity-90"
           >
-            <Text className="text-white font-bold text-lg">Select Image</Text>
+            <Text className="text-white font-bold text-base">Select Image</Text>
           </Pressable>
+
+          {/* Ad Space 1 */}
+          <View
+            className={`rounded-2xl p-4 items-center justify-center h-20 ${
+              isDarkMode ? 'bg-slate-900' : 'bg-slate-100'
+            } border-2 border-dashed ${isDarkMode ? 'border-slate-700' : 'border-slate-300'}`}
+          >
+            <Text className={`text-xs font-semibold ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>
+              📢 Ad Space 1
+            </Text>
+          </View>
 
           {selectedImage && (
             <>
+              {/* Image Preview */}
               <View
-                className={`${cardBg} backdrop-blur-md rounded-3xl p-5 border border-white/20 dark:border-slate-700/30 gap-4`}
+                className={`rounded-2xl p-3 overflow-hidden ${
+                  isDarkMode ? 'bg-slate-900' : 'bg-slate-100'
+                }`}
               >
-                <View className="items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5 rounded-2xl h-56 overflow-hidden">
-                  <Image
-                    source={{ uri: selectedImage.uri }}
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      resizeMode: 'contain',
-                    }}
-                  />
+                <Image
+                  source={{ uri: selectedImage.uri }}
+                  style={{
+                    width: '100%',
+                    height: 180,
+                    resizeMode: 'contain',
+                  }}
+                />
+              </View>
+
+              {/* Image Info */}
+              <View className={`rounded-2xl p-4 gap-2 ${isDarkMode ? 'bg-slate-900' : 'bg-slate-100'}`}>
+                <View className="flex-row justify-between items-center">
+                  <Text className={`text-xs font-semibold ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                    SIZE
+                  </Text>
+                  <Text className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                    {selectedImage.width} × {selectedImage.height}
+                  </Text>
                 </View>
-                <View className="gap-3">
-                  <View className="flex-row justify-between items-center">
-                    <Text className="text-xs text-muted font-semibold uppercase">Dimensions</Text>
-                    <Text className="text-sm font-bold text-primary">
-                      {selectedImage.width} × {selectedImage.height}
-                    </Text>
-                  </View>
-                  <View className="h-px bg-white/10 dark:bg-slate-700/20" />
-                  <View className="flex-row justify-between items-center">
-                    <Text className="text-xs text-muted font-semibold uppercase">File Size</Text>
-                    <Text className="text-sm font-semibold text-foreground">
-                      {formatFileSize(selectedImage.size)}
-                    </Text>
-                  </View>
+                <View className={`h-px ${isDarkMode ? 'bg-slate-800' : 'bg-slate-200'}`} />
+                <View className="flex-row justify-between items-center">
+                  <Text className={`text-xs font-semibold ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                    FILE
+                  </Text>
+                  <Text className={`text-sm font-semibold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                    {formatFileSize(selectedImage.size)}
+                  </Text>
                 </View>
               </View>
 
-              <View
-                className={`${cardBg} backdrop-blur-md rounded-3xl p-5 border border-white/20 dark:border-slate-700/30 gap-4`}
-              >
-                <Text className={`text-lg font-bold ${textColor}`}>Scale Settings</Text>
+              {/* Scale Settings */}
+              <View className={`rounded-2xl p-4 gap-3 ${isDarkMode ? 'bg-slate-900' : 'bg-slate-100'}`}>
+                <Text className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                  Settings
+                </Text>
 
                 <View className="gap-2">
-                  <Text className="text-xs text-muted font-semibold uppercase">Width (px)</Text>
+                  <Text className={`text-xs font-semibold ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                    WIDTH
+                  </Text>
                   <TextInput
                     value={targetWidth}
                     onChangeText={setTargetWidth}
                     placeholder="800"
-                    placeholderTextColor="#94A3B8"
+                    placeholderTextColor={isDarkMode ? '#64748B' : '#CBD5E1'}
                     keyboardType="number-pad"
-                    className={`${isDarkMode ? 'bg-slate-900/20 text-white' : 'bg-white/20 text-slate-900'} border border-white/20 dark:border-slate-700/30 rounded-xl px-4 py-3 text-base font-semibold`}
+                    className={`rounded-lg px-3 py-2 text-sm font-semibold ${
+                      isDarkMode
+                        ? 'bg-slate-800 text-white border border-slate-700'
+                        : 'bg-white text-slate-900 border border-slate-300'
+                    }`}
                   />
                 </View>
 
                 <View className="gap-2">
-                  <Text className="text-xs text-muted font-semibold uppercase">Height (px)</Text>
+                  <Text className={`text-xs font-semibold ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                    HEIGHT
+                  </Text>
                   <TextInput
                     value={targetHeight}
                     onChangeText={setTargetHeight}
                     placeholder="600"
-                    placeholderTextColor="#94A3B8"
+                    placeholderTextColor={isDarkMode ? '#64748B' : '#CBD5E1'}
                     keyboardType="number-pad"
                     editable={!maintainAspectRatio}
-                    className={`${isDarkMode ? 'bg-slate-900/20 text-white' : 'bg-white/20 text-slate-900'} border border-white/20 dark:border-slate-700/30 rounded-xl px-4 py-3 text-base font-semibold ${
-                      !maintainAspectRatio ? '' : 'opacity-50'
-                    }`}
+                    className={`rounded-lg px-3 py-2 text-sm font-semibold ${
+                      isDarkMode
+                        ? 'bg-slate-800 text-white border border-slate-700'
+                        : 'bg-white text-slate-900 border border-slate-300'
+                    } ${!maintainAspectRatio ? '' : 'opacity-50'}`}
                   />
                 </View>
 
                 <Pressable
                   onPress={() => setMaintainAspectRatio(!maintainAspectRatio)}
-                  className="flex-row items-center gap-3 py-2 active:opacity-70"
+                  className="flex-row items-center gap-2 py-2 active:opacity-70"
                 >
                   <View
-                    className={`w-6 h-6 rounded-lg border-2 items-center justify-center ${
+                    className={`w-5 h-5 rounded border-2 items-center justify-center ${
                       maintainAspectRatio
                         ? 'bg-gradient-to-r from-primary to-cyan-400 border-primary'
-                        : 'border-white/30 dark:border-slate-700/30 bg-white/10 dark:bg-slate-900/10'
+                        : isDarkMode
+                          ? 'border-slate-700 bg-slate-800'
+                          : 'border-slate-300 bg-white'
                     }`}
                   >
                     {maintainAspectRatio && (
-                      <Text className="text-white font-bold text-sm">✓</Text>
+                      <Text className="text-white font-bold text-xs">✓</Text>
                     )}
                   </View>
-                  <Text className={`text-sm font-semibold ${textColor}`}>
+                  <Text className={`text-xs font-semibold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
                     Maintain Aspect Ratio
                   </Text>
                 </Pressable>
               </View>
 
+              {/* Ad Space 2 */}
+              <View
+                className={`rounded-2xl p-4 items-center justify-center h-20 ${
+                  isDarkMode ? 'bg-slate-900' : 'bg-slate-100'
+                } border-2 border-dashed ${isDarkMode ? 'border-slate-700' : 'border-slate-300'}`}
+              >
+                <Text className={`text-xs font-semibold ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                  📢 Ad Space 2
+                </Text>
+              </View>
+
+              {/* Scale Button */}
               <Pressable
                 onPress={scaleImage}
                 disabled={isScaling}
-                className={`bg-gradient-to-r from-primary to-cyan-400 rounded-3xl py-5 items-center shadow-lg ${
+                className={`bg-gradient-to-r from-primary to-cyan-400 rounded-2xl py-4 items-center shadow-lg ${
                   isScaling ? 'opacity-60' : 'active:opacity-90'
                 }`}
               >
                 {isScaling ? (
                   <ActivityIndicator color="white" size="small" />
                 ) : (
-                  <Text className="text-white font-bold text-lg">Scale Image</Text>
+                  <Text className="text-white font-bold text-base">Scale Image</Text>
                 )}
               </Pressable>
             </>

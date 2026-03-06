@@ -83,3 +83,14 @@
 - [x] Implement light/dark mode switching
 - [x] Persist theme preference
 - [x] Update UI colors for both themes
+
+
+## Critical Fixes Needed
+
+- [x] Fix theme toggle functionality (not working)
+- [x] Fix home button navigation
+- [x] Fix share button functionality
+- [x] Fix download button functionality
+- [x] Redesign home UI for cleaner appearance
+- [x] Add ad space placeholder in home UI
+- [x] Test all buttons and theme switching
