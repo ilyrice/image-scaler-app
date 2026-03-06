@@ -100,3 +100,11 @@
 
 - [x] CRITICAL: Fix image picker on phone - completely rewritten with better error handling and logging
 - [x] Fix TypeScript error in useEffect permission requests
+
+
+## Image Picker Deep Debug
+
+- [x] Investigate why image picker doesn't work on mobile despite permissions
+- [x] Try alternative image picker implementation
+- [x] Test with different permission request approach
+- [x] Verify button press is being triggered

@@ -9,6 +9,7 @@ import {
   Alert,
   Platform,
   Pressable,
+  StyleSheet,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -34,6 +35,30 @@ interface ScaledImage {
   newSize: number;
 }
 
+const styles = StyleSheet.create({
+  primaryButton: {
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryButtonPressed: {
+    opacity: 0.8,
+  },
+  secondaryButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+  },
+  secondaryButtonPressed: {
+    opacity: 0.7,
+  },
+});
+
 export default function HomeScreen() {
   const colorScheme = useColorScheme();
   const [selectedImage, setSelectedImage] = useState<PickedImage | null>(null);
@@ -51,9 +76,9 @@ export default function HomeScreen() {
       if (Platform.OS !== 'web') {
         try {
           const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-          console.log('Image picker permission status:', status);
+          console.log('[INIT] Image picker permission status:', status);
         } catch (error) {
-          console.error('Error requesting permissions:', error);
+          console.error('[INIT] Error requesting permissions:', error);
         }
       }
     })();
@@ -68,36 +93,54 @@ export default function HomeScreen() {
       try {
         await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       } catch (e) {
-        console.error('Haptics error:', e);
+        console.error('[HAPTIC] Error:', e);
       }
     }
   };
 
   const pickImage = async () => {
+    console.log('[PICKER] Starting image picker...');
     try {
-      console.log('Starting image picker...');
       await triggerHaptic();
 
-      console.log('Launching image library...');
+      // Request permissions explicitly
+      if (Platform.OS !== 'web') {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        console.log('[PICKER] Permission status:', status);
+        
+        if (status !== 'granted') {
+          Alert.alert(
+            'Permission Denied',
+            'Please allow access to your photo library in settings.',
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+      }
+
+      console.log('[PICKER] Launching image library...');
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: false,
         quality: 1,
+        exif: false,
       });
 
-      console.log('Image picker result:', result);
+      console.log('[PICKER] Result canceled:', result.canceled);
+      console.log('[PICKER] Assets count:', result.assets?.length);
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
-        console.log('Selected asset:', asset);
+        console.log('[PICKER] Selected asset URI:', asset.uri);
+        console.log('[PICKER] Asset dimensions:', asset.width, 'x', asset.height);
 
         let fileSize = 0;
         try {
           const fileInfo = await FileSystem.getInfoAsync(asset.uri);
           fileSize = (fileInfo as any).size || 0;
-          console.log('File size:', fileSize);
+          console.log('[PICKER] File size:', fileSize);
         } catch (e) {
-          console.error('Error getting file size:', e);
+          console.error('[PICKER] Error getting file size:', e);
           fileSize = 0;
         }
 
@@ -109,13 +152,19 @@ export default function HomeScreen() {
         });
         setScaledImage(null);
         setShowResults(false);
-        console.log('Image selected successfully');
+        console.log('[PICKER] Image selected successfully');
       } else {
-        console.log('Image selection was canceled');
+        console.log('[PICKER] Image selection was canceled');
       }
     } catch (error: any) {
-      console.error('Image picker error:', error);
-      Alert.alert('Error', `Failed to pick image: ${error?.message || 'Unknown error'}`);
+      console.error('[PICKER] Error:', error);
+      console.error('[PICKER] Error message:', error?.message);
+      console.error('[PICKER] Error code:', error?.code);
+      Alert.alert(
+        'Error',
+        `Failed to pick image: ${error?.message || 'Unknown error'}`,
+        [{ text: 'OK' }]
+      );
     }
   };
 
@@ -151,6 +200,7 @@ export default function HomeScreen() {
         const fileInfo = await FileSystem.getInfoAsync(result.uri);
         newSize = (fileInfo as any).size || 0;
       } catch (e) {
+        console.error('Error getting scaled file size:', e);
         newSize = 0;
       }
 
@@ -169,7 +219,7 @@ export default function HomeScreen() {
         },
         (error) => {
           console.error('Error getting image size:', error);
-          Alert.alert('Error', 'Failed to get scaled image dimensions');
+          Alert.alert('Error', 'Failed to process image');
           setIsScaling(false);
         }
       );
@@ -189,17 +239,15 @@ export default function HomeScreen() {
       if (Platform.OS !== 'web') {
         const asset = await MediaLibrary.createAssetAsync(scaledImage.uri);
         try {
-          await MediaLibrary.createAlbumAsync('Scaled Images', asset, false);
+          await MediaLibrary.createAlbumAsync('Processed Images', asset, false);
         } catch (e) {
           console.error('Album creation error:', e);
         }
         Alert.alert('✅ Success', 'Image saved to gallery!');
-      } else {
-        Alert.alert('Info', 'Save to gallery is not available on web');
       }
     } catch (error) {
-      Alert.alert('❌ Error', 'Failed to save image to gallery');
-      console.error('Save to gallery error:', error);
+      Alert.alert('❌ Error', 'Failed to save image');
+      console.error('Save error:', error);
     } finally {
       setActionInProgress(null);
     }
@@ -213,18 +261,17 @@ export default function HomeScreen() {
       await triggerHaptic();
       const isAvailable = await Sharing.isAvailableAsync();
       if (!isAvailable) {
-        Alert.alert('Error', 'Sharing is not available on this platform');
+        Alert.alert('Error', 'Sharing not available');
         setActionInProgress(null);
         return;
       }
       await Sharing.shareAsync(scaledImage.uri, {
         mimeType: 'image/jpeg',
-        dialogTitle: 'Share Scaled Image',
+        dialogTitle: 'Share Image',
       });
     } catch (error: any) {
       if (error?.message !== 'User did not share') {
         Alert.alert('❌ Error', 'Failed to share image');
-        console.error('Share error:', error);
       }
     } finally {
       setActionInProgress(null);
@@ -237,17 +284,17 @@ export default function HomeScreen() {
     setActionInProgress('download');
     try {
       await triggerHaptic();
-      const timestamp = Date.now();
+      const timestamp = new Date().getTime();
       const filename = `scaled-image-${timestamp}.jpg`;
       const docDir = (FileSystem as any).documentDirectory || (FileSystem as any).cacheDirectory;
-      const downloadPath = `${docDir}${filename}`;
-
+      const downloadDir = docDir + filename;
+      
       await FileSystem.copyAsync({
         from: scaledImage.uri,
-        to: downloadPath,
+        to: downloadDir,
       });
-
-      Alert.alert('✅ Success', `Image saved to: ${filename}`);
+      
+      Alert.alert('✅ Success', `Image downloaded as ${filename}`);
     } catch (error) {
       Alert.alert('❌ Error', 'Failed to download image');
       console.error('Download error:', error);
@@ -264,51 +311,44 @@ export default function HomeScreen() {
     return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
   };
 
-  // Results Screen
+  const bgColor = isDarkMode ? '#0F172A' : '#FFFFFF';
+  const textColor = isDarkMode ? '#FFFFFF' : '#0F172A';
+  const secondaryBg = isDarkMode ? '#1E293B' : '#F1F5F9';
+  const borderColor = isDarkMode ? '#334155' : '#E2E8F0';
+
   if (showResults && scaledImage) {
     return (
       <ScreenContainer className="p-4" containerClassName={isDarkMode ? 'bg-slate-950' : 'bg-white'}>
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false}>
           <View className="flex-1 gap-4">
-            {/* Header */}
             <View className="flex-row justify-between items-center mb-2">
-              <View>
-                <Text className={`text-3xl font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-                  Done!
-                </Text>
-                <Text className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                  Ready to use
-                </Text>
-              </View>
+              <Text className={`text-3xl font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                Done!
+              </Text>
               <Pressable
                 onPress={toggleTheme}
-                className={`w-10 h-10 rounded-full items-center justify-center ${
-                  isDarkMode ? 'bg-slate-800' : 'bg-slate-100'
-                }`}
+                style={({ pressed }) => [
+                  styles.secondaryButton,
+                  {
+                    width: 40,
+                    height: 40,
+                    borderColor: borderColor,
+                    backgroundColor: secondaryBg,
+                  },
+                  pressed && styles.secondaryButtonPressed,
+                ]}
               >
                 <Text className="text-lg">{isDarkMode ? '☀️' : '🌙'}</Text>
               </Pressable>
             </View>
 
-            {/* Image Preview */}
-            <View
-              className={`rounded-2xl p-3 overflow-hidden ${
-                isDarkMode ? 'bg-slate-900' : 'bg-slate-100'
-              }`}
-            >
-              <Image
-                source={{ uri: scaledImage.uri }}
-                style={{
-                  width: '100%',
-                  height: 240,
-                  resizeMode: 'contain',
-                }}
-              />
-            </View>
+            <Image
+              source={{ uri: scaledImage.uri }}
+              style={{ width: '100%', height: 240, resizeMode: 'contain' }}
+            />
 
-            {/* Stats */}
             <View className={`rounded-2xl p-4 gap-3 ${isDarkMode ? 'bg-slate-900' : 'bg-slate-100'}`}>
-              <View className="flex-row justify-between items-center">
+              <View className="flex-row justify-between">
                 <Text className={`text-xs font-semibold ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
                   SIZE
                 </Text>
@@ -317,25 +357,7 @@ export default function HomeScreen() {
                 </Text>
               </View>
               <View className={`h-px ${isDarkMode ? 'bg-slate-800' : 'bg-slate-200'}`} />
-              <View className="flex-row justify-between items-center">
-                <Text className={`text-xs font-semibold ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                  BEFORE
-                </Text>
-                <Text className={`text-sm font-semibold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-                  {formatFileSize(scaledImage.originalSize)}
-                </Text>
-              </View>
-              <View className={`h-px ${isDarkMode ? 'bg-slate-800' : 'bg-slate-200'}`} />
-              <View className="flex-row justify-between items-center">
-                <Text className={`text-xs font-semibold ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                  AFTER
-                </Text>
-                <Text className="text-sm font-bold text-green-500">
-                  {formatFileSize(scaledImage.newSize)}
-                </Text>
-              </View>
-              <View className={`h-px ${isDarkMode ? 'bg-slate-800' : 'bg-slate-200'}`} />
-              <View className="flex-row justify-between items-center">
+              <View className="flex-row justify-between">
                 <Text className={`text-xs font-semibold ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
                   SAVED
                 </Text>
@@ -347,80 +369,79 @@ export default function HomeScreen() {
               </View>
             </View>
 
-            {/* Ad Space */}
-            <View
-              className={`rounded-2xl p-4 items-center justify-center h-24 ${
-                isDarkMode ? 'bg-slate-900' : 'bg-slate-100'
-              } border-2 border-dashed ${isDarkMode ? 'border-slate-700' : 'border-slate-300'}`}
-            >
-              <Text className={`text-xs font-semibold ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                📢 Ad Space
-              </Text>
-            </View>
-
-            {/* Action Buttons */}
-            <View className="gap-3 mt-2">
+            <View className="gap-3">
               <Pressable
                 onPress={saveToGallery}
                 disabled={actionInProgress === 'save'}
-                className={`bg-gradient-to-r from-primary to-cyan-400 rounded-xl py-3 items-center justify-center ${
-                  actionInProgress === 'save' ? 'opacity-60' : 'active:opacity-80'
-                }`}
+                style={({ pressed }) => [
+                  styles.primaryButton,
+                  {
+                    backgroundColor: actionInProgress === 'save' ? '#0891B2' : '#00D9FF',
+                  },
+                  pressed && !actionInProgress && styles.primaryButtonPressed,
+                ]}
               >
                 {actionInProgress === 'save' ? (
-                  <ActivityIndicator color="white" size="small" />
+                  <ActivityIndicator color="white" />
                 ) : (
-                  <Text className="text-white font-bold text-sm">Save to Gallery</Text>
+                  <Text className="text-white font-bold">💾 Save to Gallery</Text>
                 )}
               </Pressable>
 
-              <View className="flex-row gap-3">
-                <Pressable
-                  onPress={shareImage}
-                  disabled={actionInProgress === 'share'}
-                  className={`flex-1 rounded-xl py-3 items-center justify-center border-2 ${
-                    isDarkMode
-                      ? 'bg-slate-900 border-slate-700'
-                      : 'bg-slate-100 border-slate-300'
-                  } ${actionInProgress === 'share' ? 'opacity-60' : 'active:opacity-70'}`}
-                >
-                  {actionInProgress === 'share' ? (
-                    <ActivityIndicator color="#00D9FF" size="small" />
-                  ) : (
-                    <Text className="text-primary font-bold text-sm">Share</Text>
-                  )}
-                </Pressable>
+              <Pressable
+                onPress={shareImage}
+                disabled={actionInProgress === 'share'}
+                style={({ pressed }) => [
+                  styles.secondaryButton,
+                  {
+                    borderColor: borderColor,
+                    backgroundColor: secondaryBg,
+                  },
+                  pressed && !actionInProgress && styles.secondaryButtonPressed,
+                ]}
+              >
+                {actionInProgress === 'share' ? (
+                  <ActivityIndicator color="#00D9FF" />
+                ) : (
+                  <Text className="text-primary font-bold">📤 Share</Text>
+                )}
+              </Pressable>
 
-                <Pressable
-                  onPress={downloadImage}
-                  disabled={actionInProgress === 'download'}
-                  className={`flex-1 rounded-xl py-3 items-center justify-center border-2 ${
-                    isDarkMode
-                      ? 'bg-slate-900 border-slate-700'
-                      : 'bg-slate-100 border-slate-300'
-                  } ${actionInProgress === 'download' ? 'opacity-60' : 'active:opacity-70'}`}
-                >
-                  {actionInProgress === 'download' ? (
-                    <ActivityIndicator color="#00D9FF" size="small" />
-                  ) : (
-                    <Text className="text-primary font-bold text-sm">Download</Text>
-                  )}
-                </Pressable>
-              </View>
+              <Pressable
+                onPress={downloadImage}
+                disabled={actionInProgress === 'download'}
+                style={({ pressed }) => [
+                  styles.secondaryButton,
+                  {
+                    borderColor: borderColor,
+                    backgroundColor: secondaryBg,
+                  },
+                  pressed && !actionInProgress && styles.secondaryButtonPressed,
+                ]}
+              >
+                {actionInProgress === 'download' ? (
+                  <ActivityIndicator color="#00D9FF" />
+                ) : (
+                  <Text className="text-primary font-bold">⬇️ Download</Text>
+                )}
+              </Pressable>
 
               <Pressable
                 onPress={() => {
                   setShowResults(false);
                   setScaledImage(null);
                 }}
-                className={`rounded-xl py-3 items-center border-2 ${
-                  isDarkMode
-                    ? 'bg-slate-900 border-slate-700'
-                    : 'bg-slate-100 border-slate-300'
-                } active:opacity-70`}
+                style={({ pressed }) => [
+                  styles.secondaryButton,
+                  {
+                    borderColor: borderColor,
+                    backgroundColor: secondaryBg,
+                  },
+                  pressed && styles.secondaryButtonPressed,
+                ]}
               >
-                <Text className={`font-bold text-sm ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-                  Back
+                <Text className={`font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                  ← Back
                 </Text>
               </Pressable>
             </View>
@@ -430,12 +451,10 @@ export default function HomeScreen() {
     );
   }
 
-  // Home Screen
   return (
     <ScreenContainer className="p-4" containerClassName={isDarkMode ? 'bg-slate-950' : 'bg-white'}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false}>
         <View className="flex-1 gap-4">
-          {/* Header */}
           <View className="flex-row justify-between items-center mb-2">
             <View>
               <Text className={`text-4xl font-black ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
@@ -447,23 +466,34 @@ export default function HomeScreen() {
             </View>
             <Pressable
               onPress={toggleTheme}
-              className={`w-10 h-10 rounded-full items-center justify-center ${
-                isDarkMode ? 'bg-slate-800' : 'bg-slate-100'
-              }`}
+              style={({ pressed }) => [
+                styles.secondaryButton,
+                {
+                  width: 40,
+                  height: 40,
+                  borderColor: borderColor,
+                  backgroundColor: secondaryBg,
+                },
+                pressed && styles.secondaryButtonPressed,
+              ]}
             >
               <Text className="text-lg">{isDarkMode ? '☀️' : '🌙'}</Text>
             </Pressable>
           </View>
 
-          {/* Primary CTA */}
           <Pressable
             onPress={pickImage}
-            className="bg-gradient-to-r from-primary to-cyan-400 rounded-2xl py-4 items-center shadow-lg active:opacity-90"
+            style={({ pressed }) => [
+              styles.primaryButton,
+              {
+                backgroundColor: pressed ? '#0891B2' : '#00D9FF',
+              },
+              pressed && styles.primaryButtonPressed,
+            ]}
           >
             <Text className="text-white font-bold text-base">📸 Select Image</Text>
           </Pressable>
 
-          {/* Ad Space 1 */}
           <View
             className={`rounded-2xl p-4 items-center justify-center h-20 ${
               isDarkMode ? 'bg-slate-900' : 'bg-slate-100'
@@ -476,7 +506,6 @@ export default function HomeScreen() {
 
           {selectedImage && (
             <>
-              {/* Image Preview */}
               <View
                 className={`rounded-2xl p-3 overflow-hidden ${
                   isDarkMode ? 'bg-slate-900' : 'bg-slate-100'
@@ -492,20 +521,19 @@ export default function HomeScreen() {
                 />
               </View>
 
-              {/* Image Info */}
               <View className={`rounded-2xl p-4 gap-2 ${isDarkMode ? 'bg-slate-900' : 'bg-slate-100'}`}>
                 <View className="flex-row justify-between items-center">
                   <Text className={`text-xs font-semibold ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
                     SIZE
                   </Text>
                   <Text className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-                    {selectedImage.width} × {selectedImage.height}
+                    {selectedImage.width} × {selectedImage.height}px
                   </Text>
                 </View>
                 <View className={`h-px ${isDarkMode ? 'bg-slate-800' : 'bg-slate-200'}`} />
                 <View className="flex-row justify-between items-center">
                   <Text className={`text-xs font-semibold ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                    FILE
+                    FILE SIZE
                   </Text>
                   <Text className={`text-sm font-semibold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
                     {formatFileSize(selectedImage.size)}
@@ -513,15 +541,10 @@ export default function HomeScreen() {
                 </View>
               </View>
 
-              {/* Scale Settings */}
               <View className={`rounded-2xl p-4 gap-3 ${isDarkMode ? 'bg-slate-900' : 'bg-slate-100'}`}>
-                <Text className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-                  Settings
-                </Text>
-
-                <View className="gap-2">
-                  <Text className={`text-xs font-semibold ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                    WIDTH
+                <View>
+                  <Text className={`text-xs font-semibold mb-2 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                    TARGET WIDTH
                   </Text>
                   <TextInput
                     value={targetWidth}
@@ -529,17 +552,20 @@ export default function HomeScreen() {
                     placeholder="800"
                     placeholderTextColor={isDarkMode ? '#64748B' : '#CBD5E1'}
                     keyboardType="number-pad"
-                    className={`rounded-lg px-3 py-2 text-sm font-semibold ${
-                      isDarkMode
-                        ? 'bg-slate-800 text-white border border-slate-700'
-                        : 'bg-white text-slate-900 border border-slate-300'
-                    }`}
+                    style={{
+                      borderWidth: 1,
+                      borderColor: borderColor,
+                      borderRadius: 8,
+                      padding: 10,
+                      color: textColor,
+                      backgroundColor: isDarkMode ? '#0F172A' : '#FFFFFF',
+                    }}
                   />
                 </View>
 
-                <View className="gap-2">
-                  <Text className={`text-xs font-semibold ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                    HEIGHT
+                <View>
+                  <Text className={`text-xs font-semibold mb-2 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                    TARGET HEIGHT
                   </Text>
                   <TextInput
                     value={targetHeight}
@@ -548,64 +574,68 @@ export default function HomeScreen() {
                     placeholderTextColor={isDarkMode ? '#64748B' : '#CBD5E1'}
                     keyboardType="number-pad"
                     editable={!maintainAspectRatio}
-                    className={`rounded-lg px-3 py-2 text-sm font-semibold ${
-                      isDarkMode
-                        ? 'bg-slate-800 text-white border border-slate-700'
-                        : 'bg-white text-slate-900 border border-slate-300'
-                    } ${!maintainAspectRatio ? '' : 'opacity-50'}`}
+                    style={{
+                      borderWidth: 1,
+                      borderColor: borderColor,
+                      borderRadius: 8,
+                      padding: 10,
+                      color: textColor,
+                      backgroundColor: isDarkMode ? '#0F172A' : '#FFFFFF',
+                      opacity: maintainAspectRatio ? 0.5 : 1,
+                    }}
                   />
                 </View>
 
                 <Pressable
                   onPress={() => setMaintainAspectRatio(!maintainAspectRatio)}
-                  className="flex-row items-center gap-2 py-2 active:opacity-70"
+                  style={({ pressed }) => [
+                    {
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: 8,
+                      borderRadius: 8,
+                      backgroundColor: maintainAspectRatio ? '#00D9FF20' : 'transparent',
+                    },
+                    pressed && { opacity: 0.7 },
+                  ]}
                 >
-                  <View
-                    className={`w-5 h-5 rounded border-2 items-center justify-center ${
-                      maintainAspectRatio
-                        ? 'bg-gradient-to-r from-primary to-cyan-400 border-primary'
-                        : isDarkMode
-                          ? 'border-slate-700 bg-slate-800'
-                          : 'border-slate-300 bg-white'
-                    }`}
-                  >
-                    {maintainAspectRatio && (
-                      <Text className="text-white font-bold text-xs">✓</Text>
-                    )}
-                  </View>
-                  <Text className={`text-xs font-semibold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                  <Text className="text-lg">{maintainAspectRatio ? '✓' : '○'}</Text>
+                  <Text className={`text-sm font-semibold ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
                     Maintain Aspect Ratio
                   </Text>
                 </Pressable>
               </View>
 
-              {/* Ad Space 2 */}
-              <View
-                className={`rounded-2xl p-4 items-center justify-center h-20 ${
-                  isDarkMode ? 'bg-slate-900' : 'bg-slate-100'
-                } border-2 border-dashed ${isDarkMode ? 'border-slate-700' : 'border-slate-300'}`}
-              >
-                <Text className={`text-xs font-semibold ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                  📢 Ad Space 2
-                </Text>
-              </View>
-
-              {/* Scale Button */}
               <Pressable
                 onPress={scaleImage}
                 disabled={isScaling}
-                className={`bg-gradient-to-r from-primary to-cyan-400 rounded-2xl py-4 items-center shadow-lg ${
-                  isScaling ? 'opacity-60' : 'active:opacity-90'
-                }`}
+                style={({ pressed }) => [
+                  styles.primaryButton,
+                  {
+                    backgroundColor: isScaling ? '#0891B2' : '#00D9FF',
+                  },
+                  pressed && !isScaling && styles.primaryButtonPressed,
+                ]}
               >
                 {isScaling ? (
-                  <ActivityIndicator color="white" size="small" />
+                  <ActivityIndicator color="white" />
                 ) : (
-                  <Text className="text-white font-bold text-base">⚡ Scale Image</Text>
+                  <Text className="text-white font-bold">⚡ Scale Image</Text>
                 )}
               </Pressable>
             </>
           )}
+
+          <View
+            className={`rounded-2xl p-4 items-center justify-center h-20 ${
+              isDarkMode ? 'bg-slate-900' : 'bg-slate-100'
+            } border-2 border-dashed ${isDarkMode ? 'border-slate-700' : 'border-slate-300'}`}
+          >
+            <Text className={`text-xs font-semibold ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>
+              📢 Ad Space 2
+            </Text>
+          </View>
         </View>
       </ScrollView>
     </ScreenContainer>
